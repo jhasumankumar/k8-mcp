@@ -1,0 +1,31 @@
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: k8-mcp
+  namespace: k8-mcp
+spec:
+  selector:
+    matchLabels:
+      app: k8-mcp
+  action: ALLOW
+  rules:
+    # Allow MCP SSE and message endpoints — MCP clients (Claude, Copilot)
+    - to:
+        - operation:
+            ports: ["8080"]
+            paths:
+              - /sse
+              - /mcp/message
+
+    # Allow REST API and Swagger UI — operators and tooling
+    - to:
+        - operation:
+            ports: ["8080"]
+            paths:
+              - /api/tools
+              - /api/tools/*
+              - /api-docs
+              - /api-docs/*
+              - /swagger-ui.html
+              - /swagger-ui/*
+              - /webjars/*

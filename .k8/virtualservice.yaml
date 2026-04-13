@@ -1,0 +1,28 @@
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: k8-mcp
+  namespace: k8-mcp
+spec:
+  hosts:
+    - k8-mcp
+  http:
+    - match:
+        - uri:
+            prefix: /sse
+        - uri:
+            prefix: /mcp/message
+        - uri:
+            prefix: /api/tools
+        - uri:
+            prefix: /api-docs
+        - uri:
+            prefix: /swagger-ui
+      route:
+        - destination:
+            host: k8-mcp
+            port:
+              number: 8080
+      timeout: 0s       # disabled — SSE connections are long-lived
+      retries:
+        attempts: 0     # no retries for SSE/streaming endpoints

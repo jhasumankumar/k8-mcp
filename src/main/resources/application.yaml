@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: k8-mcp
+  ai:
+    mcp:
+      server:
+        name: k8-mcp
+        version: 1.0.0
+        type: ASYNC
+        sse-message-endpoint: /mcp/message
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: alpha
+    tags-sorter: alpha
+
+app:
+  command:
+    timeout-seconds: 30
+    max-output-chars: 50000
+  kubectl:
+    path: kubectl
+  istioctl:
+    path: istioctl
