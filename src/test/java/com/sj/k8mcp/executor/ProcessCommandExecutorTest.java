@@ -15,7 +15,10 @@ class ProcessCommandExecutorTest {
 
     @BeforeEach
     void setUp() {
-        executor = new ProcessCommandExecutor();
+        // No-op guard: executor tests cover execution mechanics only; guard logic is tested in CommandGuardTest
+        executor = new ProcessCommandExecutor(new CommandGuard() {
+            @Override public void validate(java.util.List<String> cmd) {}
+        });
         ReflectionTestUtils.setField(executor, "defaultTimeoutSeconds", 30);
         ReflectionTestUtils.setField(executor, "maxOutputChars", 50000);
     }

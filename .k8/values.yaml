@@ -1,0 +1,43 @@
+namespace: k8-mcp
+
+replicaCount: 1
+
+image:
+  repository: k8-mcp
+  tag: latest
+  pullPolicy: IfNotPresent
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+springdoc:
+  # Injected as SPRINGDOC_API_DOCS_PATH env var → springdoc.api-docs.path in application.yaml
+  apiDocsPath: /api-docs
+  # Injected as SPRINGDOC_SWAGGER_UI_PATH env var → springdoc.swagger-ui.path in application.yaml
+  swaggerUiPath: /swagger-ui.html
+
+app:
+  command:
+    timeoutSeconds: 30
+    maxOutputChars: 50000
+  kubectl:
+    path: kubectl
+  istioctl:
+    path: istioctl
+
+istio:
+  # Label applied to the namespace to enable Istio sidecar injection
+  injection: enabled
+  # Enable to deploy an Istio Gateway + ingress VirtualService for external access
+  # (e.g. via minikube tunnel or a cloud load balancer)
+  ingressGateway:
+    enabled: false
+  # Enable to grant the service account permission to create tokens and port-forward
+  # in istio-system — required for `istioctl proxy-status` in ambient mesh environments
+  tokenCreatorRole:
+    enabled: false

@@ -1,12 +1,12 @@
 apiVersion: security.istio.io/v1
 kind: AuthorizationPolicy
 metadata:
-  name: k8-mcp
-  namespace: k8-mcp
+  name: {{ .Release.Name }}
+  namespace: {{ .Values.namespace }}
 spec:
   selector:
     matchLabels:
-      app: k8-mcp
+      app: {{ .Release.Name }}
   action: ALLOW
   rules:
     # Allow MCP SSE and message endpoints — MCP clients (Claude, Copilot)
@@ -24,8 +24,8 @@ spec:
             paths:
               - /api/tools
               - /api/tools/*
-              - /api-docs
-              - /api-docs/*
-              - /swagger-ui.html
+              - {{ .Values.springdoc.apiDocsPath }}
+              - {{ .Values.springdoc.apiDocsPath }}/*
+              - {{ .Values.springdoc.swaggerUiPath }}
               - /swagger-ui/*
               - /webjars/*

@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Values.namespace }}
+data:
+  # Mounted at /app/config/application.yaml — Spring Boot picks this up automatically
+  # as an external config location and merges it with the JAR's application.yaml,
+  # with these values taking precedence.
+  application.yaml: |
+    springdoc:
+      api-docs:
+        path: {{ .Values.springdoc.apiDocsPath }}
+      swagger-ui:
+        path: {{ .Values.springdoc.swaggerUiPath }}
+    app:
+      command:
+        timeout-seconds: {{ .Values.app.command.timeoutSeconds }}
+        max-output-chars: {{ .Values.app.command.maxOutputChars }}
+      kubectl:
+        path: {{ .Values.app.kubectl.path }}
+      istioctl:
+        path: {{ .Values.app.istioctl.path }}

@@ -23,6 +23,12 @@ public class ProcessCommandExecutor implements CommandExecutor {
     @Value("${app.command.max-output-chars:50000}")
     private int maxOutputChars;
 
+    private final CommandGuard commandGuard;
+
+    public ProcessCommandExecutor(CommandGuard commandGuard) {
+        this.commandGuard = commandGuard;
+    }
+
     @Override
     public CommandResult execute(List<String> command) {
         return execute(command, Duration.ofSeconds(defaultTimeoutSeconds));
@@ -30,6 +36,12 @@ public class ProcessCommandExecutor implements CommandExecutor {
 
     @Override
     public CommandResult execute(List<String> command, Duration timeout) {
+        try {
+            commandGuard.validate(command);
+        } catch (SecurityException e) {
+            return new CommandResult("", "SECURITY VIOLATION: " + e.getMessage(), 126);
+        }
+
         try {
             ProcessBuilder pb = new ProcessBuilder(command);
             pb.redirectErrorStream(false);

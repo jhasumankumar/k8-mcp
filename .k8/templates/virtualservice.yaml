@@ -1,11 +1,11 @@
 apiVersion: networking.istio.io/v1
 kind: VirtualService
 metadata:
-  name: k8-mcp
-  namespace: k8-mcp
+  name: {{ .Release.Name }}
+  namespace: {{ .Values.namespace }}
 spec:
   hosts:
-    - k8-mcp
+    - {{ .Release.Name }}
   http:
     - match:
         - uri:
@@ -15,12 +15,12 @@ spec:
         - uri:
             prefix: /api/tools
         - uri:
-            prefix: /api-docs
+            prefix: {{ .Values.springdoc.apiDocsPath }}
         - uri:
             prefix: /swagger-ui
       route:
         - destination:
-            host: k8-mcp
+            host: {{ .Release.Name }}
             port:
               number: 8080
       timeout: 0s       # disabled — SSE connections are long-lived

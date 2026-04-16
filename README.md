@@ -4,9 +4,9 @@ A Spring AI MCP (Model Context Protocol) server that exposes `kubectl` and `isti
 
 ## Prerequisites
 
-- A `kubeconfig` file with cluster access (minimum `view` ClusterRole)
-- **Local run**: `kubectl` and `istioctl` available in your `PATH`
-- **Docker run**: only Docker required (kubectl and istioctl are bundled in the image)
+- **Local run**: `kubectl` and `istioctl` in your `PATH`, and a `kubeconfig` with cluster access
+- **Docker run**: Docker only — `kubectl` and `istioctl` are bundled in the image
+- **Kubernetes deploy**: Helm 3
 
 ## Testing with Minikube
 
@@ -58,22 +58,11 @@ curl http://<EXTERNAL-IP>/sse
 claude mcp add --transport sse --scope project k8-mcp http://localhost:8080/sse
 ```
 
-## Deploying to Kubernetes
+## Deploying to Kubernetes (Helm)
 
-For production deployments, individual manifests are in `.k8/`:
+`.k8/` is a Helm chart. All configurable values are in `.k8/values.yaml`.
 
-| File | Resource | Purpose |
-|---|---|---|
-| `namespace.yaml` | `Namespace/k8-mcp` | Dedicated namespace with `istio-injection: enabled` |
-| `serviceaccount.yaml` | `ServiceAccount/k8-mcp` | Pod identity |
-| `clusterrole.yaml` | `ClusterRole/k8-mcp-readonly` | Read-only access to pods, nodes, configmaps, Istio CRDs |
-| `clusterrolebinding.yaml` | `ClusterRoleBinding/k8-mcp-readonly` | Binds ServiceAccount to ClusterRole |
-| `deployment.yaml` | `Deployment/k8-mcp` | App container, non-root, Istio sidecar injected via namespace label |
-| `service.yaml` | `Service/k8-mcp` | ClusterIP on port 8080 |
-| `virtualservice.yaml` | `VirtualService/k8-mcp` | Istio routing with timeout disabled for SSE long-lived connections |
-| `authorizationpolicy.yaml` | `AuthorizationPolicy/k8-mcp` | Allow-list for MCP, REST API, and Swagger endpoints |
-
-When running inside the cluster, `kubectl` and `istioctl` automatically use the pod's service account token — no kubeconfig mount is needed.
+When running inside the cluster, `kubectl` and `istioctl` automatically use the pod's service account token — no kubeconfig mount needed.
 
 ```bash
 # 1. Build and push your image
@@ -81,13 +70,29 @@ When running inside the cluster, `kubectl` and `istioctl` automatically use the 
 docker build -t ghcr.io/your-org/k8-mcp:1.0.0 .
 docker push ghcr.io/your-org/k8-mcp:1.0.0
 
-# 2. Update the image in .k8/deployment.yaml, then apply
-kubectl apply -f .k8/
+# 2. Install (set your image)
+helm install k8-mcp .k8/ \
+  --set image.repository=ghcr.io/your-org/k8-mcp \
+  --set image.tag=1.0.0
 
 # 3. Verify
 kubectl rollout status deployment/k8-mcp -n k8-mcp
 kubectl get pods -n k8-mcp
 ```
+
+**Key values** (see `.k8/values.yaml` for the full list):
+
+| Value | Default | Purpose |
+|---|---|---|
+| `image.repository` | `k8-mcp` | Container image |
+| `image.tag` | `latest` | Image tag |
+| `namespace` | `k8-mcp` | Deployment namespace |
+| `springdoc.apiDocsPath` | `/api-docs` | OpenAPI JSON endpoint path |
+| `springdoc.swaggerUiPath` | `/swagger-ui.html` | Swagger UI path |
+| `app.command.timeoutSeconds` | `30` | Subprocess timeout |
+| `app.command.maxOutputChars` | `50000` | Output truncation limit |
+| `istio.ingressGateway.enabled` | `false` | Deploy Gateway + ingress VirtualService |
+| `istio.tokenCreatorRole.enabled` | `false` | Grant token/port-forward rights in istio-system (needed for `proxy-status`) |
 
 To reach the server from outside the cluster:
 
@@ -239,11 +244,3 @@ Once connected to your AI assistant:
 - _"What's the proxy status of all sidecars in the payments namespace?"_
 - _"Show the outbound clusters for the checkout pod in the prod namespace"_
 
-## Configuration Reference
-
-| Property | Default | Description |
-|---|---|---|
-| `app.command.timeout-seconds` | `30` | Default subprocess timeout in seconds |
-| `app.command.max-output-chars` | `50000` | Maximum output chars before truncation |
-| `app.kubectl.path` | `kubectl` | Path to kubectl binary |
-| `app.istioctl.path` | `istioctl` | Path to istioctl binary |

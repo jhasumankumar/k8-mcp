@@ -1,0 +1,48 @@
+{{- if .Values.istio.ingressGateway.enabled }}
+---
+# Binds to the Istio ingress controller and accepts all HTTP traffic on port 80.
+# Enable istio.ingressGateway.enabled=true to expose the server externally
+# (e.g. via minikube tunnel or a cloud load balancer).
+apiVersion: networking.istio.io/v1
+kind: Gateway
+metadata:
+  name: {{ .Release.Name }}-gateway
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - "*"
+---
+# Routes all paths from the ingress gateway to the k8-mcp service.
+# A separate VirtualService from the cluster-internal one (virtualservice.yaml)
+# because this one binds to the Gateway and uses host "*".
+# timeout: 0s disables Istio's default 15s timeout — required for SSE long-lived connections.
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: {{ .Release.Name }}-ingress
+  namespace: {{ .Values.namespace }}
+spec:
+  hosts:
+    - "*"
+  gateways:
+    - {{ .Release.Name }}-gateway
+  http:
+    - match:
+        - uri:
+            prefix: /
+      route:
+        - destination:
+            host: {{ .Release.Name }}
+            port:
+              number: 8080
+      timeout: 0s
+      retries:
+        attempts: 0
+{{- end }}
