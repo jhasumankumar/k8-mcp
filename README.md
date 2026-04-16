@@ -8,9 +8,59 @@ A Spring AI MCP (Model Context Protocol) server that exposes `kubectl` and `isti
 - **Local run**: `kubectl` and `istioctl` available in your `PATH`
 - **Docker run**: only Docker required (kubectl and istioctl are bundled in the image)
 
+## Testing with Minikube
+
+`k8.yaml` is a self-contained manifest for local testing. It deploys the server into a `mcp-test` namespace with an Istio ingress gateway, so you can test the full mesh setup on a local cluster.
+
+**Prerequisites:**
+
+- [Minikube](https://minikube.sigs.k8s.io/) running
+- Istio installed with ingress gateway:
+
+```bash
+istioctl install \
+  --set profile=ambient \
+  --set 'components.ingressGateways[0].enabled=true' \
+  --set 'components.ingressGateways[0].name=istio-ingressgateway' -y
+```
+
+**Deploy:**
+
+```bash
+# 1. Build the image inside Minikube's Docker daemon (so imagePullPolicy:Never works)
+eval $(minikube docker-env)
+./mvnw clean package -DskipTests
+docker build -t k8-mcp:latest .
+
+# 2. Apply all resources
+kubectl apply -f k8.yaml
+
+# 3. Verify the pod is running
+kubectl get pods -n mcp-test
+```
+
+**Access:**
+
+```bash
+# Option A — port-forward (simplest)
+kubectl port-forward svc/k8-mcp 8080:8080 -n mcp-test
+
+# Option B — via Istio ingress gateway
+minikube tunnel   # keep this running in a separate terminal
+kubectl get svc istio-ingressgateway -n istio-system   # get EXTERNAL-IP
+curl http://<EXTERNAL-IP>/sse
+```
+
+**Connect an AI assistant** (once port-forward or tunnel is active):
+
+```bash
+# Claude Code — project-scoped
+claude mcp add --transport sse --scope project k8-mcp http://localhost:8080/sse
+```
+
 ## Deploying to Kubernetes
 
-Manifests are in `.k8/`:
+For production deployments, individual manifests are in `.k8/`:
 
 | File | Resource | Purpose |
 |---|---|---|
@@ -39,7 +89,7 @@ kubectl rollout status deployment/k8-mcp -n k8-mcp
 kubectl get pods -n k8-mcp
 ```
 
-To reach the server from outside the cluster (for connecting an AI assistant):
+To reach the server from outside the cluster:
 
 ```bash
 kubectl port-forward svc/k8-mcp 8080:8080 -n k8-mcp
