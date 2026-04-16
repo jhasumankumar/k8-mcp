@@ -1,26 +1,30 @@
-FROM eclipse-temurin:25-jre-noble AS runtime
+# Stage 1: Download kubectl and istioctl into a throwaway Alpine layer.
+# Both are static Go binaries — no libc dependency, safe to copy into any Linux image.
+# TARGETARCH is set automatically by BuildKit: "amd64" on x86-64, "arm64" on Apple Silicon.
+FROM --platform=$BUILDPLATFORM alpine:3.21 AS tools
 
-# Install kubectl
-RUN apt-get update && apt-get install -y curl apt-transport-https gnupg && \
-    curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.32/deb/Release.key \
-      | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg && \
-    echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.32/deb/ /' \
-      > /etc/apt/sources.list.d/kubernetes.list && \
-    apt-get update && apt-get install -y kubectl && \
-    rm -rf /var/lib/apt/lists/*
+ARG TARGETARCH
 
-# Install istioctl (latest stable release)
-RUN ISTIO_VERSION=$(curl -sL https://api.github.com/repos/istio/istio/releases/latest \
-      | grep '"tag_name"' | sed 's/.*"v\([^"]*\)".*/\1/') && \
-    curl -sL "https://github.com/istio/istio/releases/download/${ISTIO_VERSION}/istioctl-${ISTIO_VERSION}-linux-amd64.tar.gz" \
-      | tar -xz -C /usr/local/bin istioctl && \
+RUN apk add --no-cache curl && \
+    curl -fsSL "https://dl.k8s.io/release/v1.32.0/bin/linux/${TARGETARCH}/kubectl" \
+         -o /usr/local/bin/kubectl && \
+    chmod +x /usr/local/bin/kubectl && \
+    ISTIO_ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "arm64" || echo "amd64") && \
+    curl -fsSL "https://github.com/istio/istio/releases/download/1.24.5/istioctl-1.24.5-linux-${ISTIO_ARCH}.tar.gz" \
+         | tar -xz -C /usr/local/bin istioctl && \
     chmod +x /usr/local/bin/istioctl
+
+# Stage 2: Minimal JRE runtime on Alpine (~150 MB vs ~420 MB for Ubuntu Noble).
+# curl, apt, and all build-time tooling are left behind in stage 1.
+FROM eclipse-temurin:25-jre-alpine
+
+COPY --from=tools /usr/local/bin/kubectl  /usr/local/bin/kubectl
+COPY --from=tools /usr/local/bin/istioctl /usr/local/bin/istioctl
 
 WORKDIR /app
 COPY target/k8-mcp-*.jar app.jar
 
-# Run as non-root user; mount kubeconfig at /home/mcpuser/.kube/config
-RUN useradd -r -u 1001 -m mcpuser
+RUN adduser -D -u 1001 mcpuser
 USER mcpuser
 
 EXPOSE 8080

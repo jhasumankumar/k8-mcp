@@ -1,0 +1,28 @@
+# Exclude everything in target/ except the fat JAR
+target/*
+!target/k8-mcp-*.jar
+
+# Source code, tests, and resources — compiled into the JAR, not needed separately
+src/
+
+# Maven build system
+pom.xml
+mvnw
+mvnw.cmd
+.mvn/
+
+# Kubernetes manifests
+.k8/
+
+# Version control
+.git/
+.gitignore
+.gitattributes
+
+# IDE files
+.idea/
+*.iml
+
+# Documentation
+*.md
+HELP.md

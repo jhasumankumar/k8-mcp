@@ -1,0 +1,196 @@
+# Self-contained Minikube deployment for k8-mcp
+#
+# Prerequisites:
+#   1. Istio installed:   istioctl install --set profile=ambient \
+#  --set 'components.ingressGateways[0].enabled=true' \
+#  --set 'components.ingressGateways[0].name=istio-ingressgateway' -y
+#
+#   2. Build the image inside Minikube's Docker daemon so imagePullPolicy:Never works:
+#        eval $(minikube docker-env)
+#        docker build -t k8-mcp:latest .
+#   3. Apply:             kubectl apply -f k8.yaml
+#   4. Start tunnel:      minikube tunnel          (keeps running in a separate terminal)
+#   5. Get ingress IP:    kubectl get svc istio-ingressgateway -n istio-system
+#   6. Access:            curl http://<EXTERNAL-IP>/api/tools
+#                         curl http://<EXTERNAL-IP>/swagger-ui.html
+#                         SSE: http://<EXTERNAL-IP>/sse
+
+# claude mcp add --transport sse --scope project k8-mcp http://localhost:8080/sse
+# kubectl port-forward svc/k8-mcp 8080:8080 -n mcp-test
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mcp-test
+  labels:
+    istio-injection: enabled
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: k8-mcp
+  namespace: mcp-test
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: k8-mcp-readonly
+rules:
+  - apiGroups: [""]
+    resources:
+      - pods
+      - pods/log
+      - nodes
+      - configmaps
+      - namespaces
+    verbs: ["get", "list"]
+  - apiGroups: ["networking.istio.io"]
+    resources:
+      - virtualservices
+      - destinationrules
+      - serviceentries
+      - envoyfilters
+    verbs: ["get", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: k8-mcp-readonly
+subjects:
+  - kind: ServiceAccount
+    name: k8-mcp
+    namespace: mcp-test
+roleRef:
+  kind: ClusterRole
+  name: k8-mcp-readonly
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: k8-mcp-token-creator
+  namespace: istio-system
+rules:
+  - apiGroups: [""]
+    resources: ["serviceaccounts/token", "pods/portforward"]
+    verbs: ["create"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: k8-mcp-token-creator
+  namespace: istio-system
+subjects:
+  - kind: ServiceAccount
+    name: k8-mcp
+    namespace: mcp-test
+roleRef:
+  kind: Role
+  name: k8-mcp-token-creator
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8-mcp
+  namespace: mcp-test
+  labels:
+    app: k8-mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: k8-mcp
+  template:
+    metadata:
+      labels:
+        app: k8-mcp
+    spec:
+      serviceAccountName: k8-mcp
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      containers:
+        - name: k8-mcp
+          image: k8-mcp:latest
+          imagePullPolicy: Never   # use the image built locally inside Minikube's Docker daemon
+          ports:
+            - name: http
+              containerPort: 8080
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+---
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: k8-mcp
+  namespace: mcp-test
+spec:
+  selector:
+    app: k8-mcp
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+  type: ClusterIP
+
+---
+# Gateway: binds to the Istio ingress controller and accepts all HTTP traffic on port 80.
+# minikube tunnel assigns an external IP to the istio-ingressgateway LoadBalancer service.
+apiVersion: networking.istio.io/v1
+kind: Gateway
+metadata:
+  name: k8-mcp-gateway
+  namespace: mcp-test
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - "*"
+
+---
+# VirtualService: routes all paths from the gateway to the k8-mcp service.
+# timeout: 0s disables Istio's default 15s timeout — required for SSE long-lived connections.
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: k8-mcp
+  namespace: mcp-test
+spec:
+  hosts:
+    - "*"
+  gateways:
+    - k8-mcp-gateway
+  http:
+    - match:
+        - uri:
+            prefix: /
+      route:
+        - destination:
+            host: k8-mcp
+            port:
+              number: 8080
